@@ -25,13 +25,28 @@ Fast event bus without reflection
 public class Handler {
 
     @Subscribe
-    public void handle(MyEvent event) {
-        ...
+    public void handle(String event) {
+        System.out.println("Received event: " + event);
     }
 
     @Subscribe
-    void handle(MyOtherEvent event) throws Exception {
+    void handle(MyEvent event) throws Exception {
         ...
+    }
+}
+
+
+public class App {
+    public static void main( String[] args ) {
+        Bus bus = new Bus(System.out::println, new ForkJoinPool());
+        bus.subscribe(new Handler());
+
+        bus.publish("Test sync event");
+        bus.publishAsync("Test async event");
+        bus.publisher(String.class).publish("Test sync publisher");
+        bus.publisherAsync(String.class).publish("Test async publisher");
+
+        bus.publish(new MyEvent());
     }
 }
 ```

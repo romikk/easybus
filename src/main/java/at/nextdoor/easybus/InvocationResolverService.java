@@ -1,6 +1,8 @@
 package at.nextdoor.easybus;
 
 import net.openhft.compiler.CachedCompiler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
@@ -20,6 +22,8 @@ import static java.util.stream.Collectors.toList;
  * Created by romikk on 06/03/15.
  */
 public class InvocationResolverService {
+    private static final Logger LOG = LoggerFactory.getLogger(InvocationResolverService.class);
+
     private static final Map<Class<? extends Annotation>,InvocationResolverService> instances = Collections.synchronizedMap(new HashMap<>());
     private static final String invocationClassName = Invocation.class.getCanonicalName();
     private static final String resolverClassName = Resolver.class.getCanonicalName();
@@ -39,8 +43,8 @@ public class InvocationResolverService {
     }
 
     public static interface Resolver {
-        default <E> Invocation<E> create(Object l, ThrowableConsumer<E> c, Class<E> p){
-            return new Invocation<>(l,c,p);
+        default <E> Invocation<E> create(Object l, String m, ThrowableConsumer<E> c, Class<E> p){
+            return new Invocation<>(l, m, c,p);
         }
 
         Stream<Invocation<?>> resolve(Object handler);
@@ -63,7 +67,7 @@ public class InvocationResolverService {
         handlerMethods(handlerClass).forEach(method -> {
             String methodDeclaringClassName = method.getDeclaringClass().getCanonicalName();
             String parameterClassName = method.getParameterTypes()[0].getCanonicalName();
-            sb.append("\ncreate(handler,(e)->((").append(methodDeclaringClassName).append(")handler).")
+            sb.append("\ncreate(handler,\"").append(method.getName()).append("\",(e)->((").append(methodDeclaringClassName).append(")handler).")
                     .append(method.getName()).append("((").append(parameterClassName).append(")e),")
                     .append(parameterClassName).append(".class),");
         });
@@ -72,7 +76,7 @@ public class InvocationResolverService {
         sb.append(");}}");
 
         try {
-            Class generatedClass = compiler.loadFromJava(handlerClass.getClassLoader(), generatedClassName, sb.toString());
+            Class generatedClass = compiler.loadFromJava(handlerClass.getClassLoader(), handlerPackage+'.'+generatedClassName, sb.toString());
             return (Resolver) generatedClass.newInstance();
         } catch (Exception e) {
             throw new CompilationFailedException("Failed to compile generated resolver class for " + handlerClass, e);

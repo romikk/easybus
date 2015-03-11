@@ -14,10 +14,10 @@ public class Bus implements PubSub {
     private final InvocationResolverService invocationResolver = InvocationResolverService.instance(Subscribe.class);
     private final ConcurrentMap<Class, List<Invocation>> listeners = new ConcurrentHashMap<>();
     private final ConcurrentMap<Object, List<Runnable>> removals = new ConcurrentHashMap<>();
-    private final Consumer<InvocationError> errorHandler;
+    private final Consumer<PublicationError> errorHandler;
     private final ForkJoinPool threadPool;
 
-    public Bus(final Consumer<InvocationError> errorHandler, final ForkJoinPool threadPool) {
+    public Bus(final Consumer<PublicationError> errorHandler, final ForkJoinPool threadPool) {
         this.errorHandler = errorHandler;
         this.threadPool = threadPool;
     }
@@ -62,7 +62,7 @@ public class Bus implements PubSub {
     }
 
     private <E> Consumer<Throwable> errorConsumer(final E event, final Invocation inv) {
-        return (ex)->errorHandler.accept(new InvocationError(inv.listener,event,ex));
+        return (ex)->errorHandler.accept(new PublicationError(inv.listener, inv.methodName, event,ex));
     }
 
     public void subscribe(final Object listener) {

@@ -1,5 +1,6 @@
 package at.nextdoor.easybus;
 
+import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -12,7 +13,7 @@ import java.util.function.Consumer;
  */
 public class Bus implements PubSub {
     private final InvocationResolverService invocationResolver = InvocationResolverService.instance(Subscribe.class);
-    private final ConcurrentMap<Class, List<Invocation>> listeners = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Class, List<WeakReference<Invocation>>> listeners = new ConcurrentHashMap<>();
     private final ConcurrentMap<Object, List<Runnable>> removals = new ConcurrentHashMap<>();
     private final Consumer<PublicationError> errorHandler;
     private final ForkJoinPool threadPool;
@@ -23,14 +24,14 @@ public class Bus implements PubSub {
     }
 
     public <E> void publish(final E event) {
-        final List<Invocation> invocations = listeners.get(event.getClass());
+        final List<WeakReference<Invocation>> invocations = listeners.get(event.getClass());
         if (invocations != null) {
             publish(event, invocations);
         }
     }
 
     public <E> void publishAsync(final E event) {
-        final List<Invocation> invocations = listeners.get(event.getClass());
+        final List<WeakReference<Invocation>> invocations = listeners.get(event.getClass());
         if (invocations != null) {
             publishAsync(event, invocations);
         }
@@ -40,25 +41,35 @@ public class Bus implements PubSub {
      * This saves a hashmap lookup for even shorter path from publisher to listener
      */
     public <E> Publisher<E> publisher(final Class<E> eventType) {
-        final List<Invocation> invocationList = listeners.computeIfAbsent(eventType, t -> new CopyOnWriteArrayList<>());
+        final List<WeakReference<Invocation>> invocationList = listeners.computeIfAbsent(eventType, t -> new CopyOnWriteArrayList<>());
         return (event) -> publish(event, invocationList);
     }
 
     public <E> Publisher<E> publisherAsync(final Class<E> eventType) {
-        final List<Invocation> invocationList = listeners.computeIfAbsent(eventType, t -> new CopyOnWriteArrayList<>());
+        final List<WeakReference<Invocation>> invocationList = listeners.computeIfAbsent(eventType, t -> new CopyOnWriteArrayList<>());
         return (event) -> publishAsync(event, invocationList);
     }
 
     @SuppressWarnings("unchecked")
-    private <E> void publish(final E event, final List<Invocation> invocations) {
-        invocations.forEach(inv -> inv.handler.accept(event, errorConsumer(event, inv)));
+    private <E> void publish(final E event, final List<WeakReference<Invocation>> invocations) {
+        invocations.forEach(invRef -> handle(event,invRef,invocations));
     }
 
     @SuppressWarnings("unchecked")
-    private <E> void publishAsync(final E event, final List<Invocation> invocations) {
+    private <E> void publishAsync(final E event, final List<WeakReference<Invocation>> invocations) {
         threadPool.submit(() ->
-                invocations.parallelStream().forEach(inv ->
-                        inv.handler.accept(event, errorConsumer(event, inv))));
+                invocations.parallelStream().forEach(invRef ->
+                        handle(event, invRef, invocations)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private <E> void handle(final E event, final WeakReference<Invocation> invRef, final List<WeakReference<Invocation>> invocations) {
+        final Invocation inv = invRef.get();
+        if(inv != null) {
+            inv.handler.accept(event, errorConsumer(event, inv));
+        } else {
+            invocations.remove(invRef);
+        }
     }
 
     private <E> Consumer<Throwable> errorConsumer(final E event, final Invocation inv) {
@@ -69,9 +80,10 @@ public class Bus implements PubSub {
         final List<Runnable> removalTasks = removals.computeIfAbsent(new IdentityKey(listener), l -> new CopyOnWriteArrayList<>());
 
         invocationResolver.resolveInvocations(listener).forEach(inv -> {
-            final List<Invocation> invocationList = listeners.computeIfAbsent(inv.paramType, t -> new CopyOnWriteArrayList<>());
-            invocationList.add(inv);
-            removalTasks.add(() -> invocationList.remove(inv));
+            final List<WeakReference<Invocation>> invocationList = listeners.computeIfAbsent(inv.paramType, t -> new CopyOnWriteArrayList<>());
+            final WeakReference<Invocation> ref = new WeakReference<>(inv);
+            invocationList.add(ref);
+            removalTasks.add(() -> invocationList.remove(ref));
         });
     }
 

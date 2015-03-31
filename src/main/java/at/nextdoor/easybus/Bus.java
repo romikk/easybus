@@ -66,8 +66,7 @@ public class Bus implements PubSub {
     }
 
     public void subscribe(final Object listener) {
-
-        final List<Runnable> removalTasks = removals.computeIfAbsent(listener, l -> new CopyOnWriteArrayList<>());
+        final List<Runnable> removalTasks = removals.computeIfAbsent(new IdentityKey(listener), l -> new CopyOnWriteArrayList<>());
 
         invocationResolver.resolveInvocations(listener).forEach(inv -> {
             final List<Invocation> invocationList = listeners.computeIfAbsent(inv.paramType, t -> new CopyOnWriteArrayList<>());
@@ -77,7 +76,7 @@ public class Bus implements PubSub {
     }
 
     public void unsubscribe(final Object listener) {
-        final List<Runnable> removalTasks = removals.remove(listener);
+        final List<Runnable> removalTasks = removals.remove(new IdentityKey(listener));
         if (removalTasks != null) {
             removalTasks.forEach(Runnable::run);
         }

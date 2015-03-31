@@ -47,6 +47,9 @@ public class App {
         bus.publisherAsync(String.class).publish("Test async publisher");
 
         bus.publish(new MyEvent());
+        bus.publishAsync(new MyEvent());
+        bus.publisher(MyEvent.class).publish(new MyEvent());
+        bus.publisherAsync(MyEvent.class).publish(new MyEvent());
     }
 }
 ```

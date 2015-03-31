@@ -1,3 +1,5 @@
+[ ![Download](https://api.bintray.com/packages/romikk/maven/easybus/images/download.svg) ](https://bintray.com/romikk/maven/easybus/_latestVersion)
+
 # EasyBus
 Fast event bus without reflection
 
